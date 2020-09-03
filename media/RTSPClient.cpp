@@ -4,23 +4,61 @@
 #include <boost/bind/bind.hpp>
 #include <iostream>
 namespace fantasy{
-    RTSPClient::RTSPClient( boost::asio::io_context& io_context):m_io_context(io_context){
-
+    RTSPClient::RTSPClient( boost::asio::io_context& ioContext,const char*progName,const char* rtspUrl):mIoContext(ioContext),
+        mProgName(progame),mUrl(rtspUrl),mCseq(0){
     }
-       
+    void RTSPClient::handle_write(const boost::system::error_code& error,std::size_t bytes_transferred){
+        if(!error.failed())
+        {
+            std::cout<<"handle write success"<<std::endl;
+        }
+        else
+        {
+            std::cout<<"handle write failure"<<std::endl;
+        }
+        
+    }   
     int RTSPClient::sendDescribeCommand() {
+        /*
+        DESCRIBE rtsp://192.168.20.136:5000/xxx666 RTSP/1.0
+        CSeq: 2
+        token: 
+        Accept: application/sdp
+        User-Agent: VLC media player (LIVE555 Streaming Media v2005.11.10) 
+        */
+       sprintf(write_buff,
+       "%s %s RTSP/1.0\r\n"
+       "CSeq: %d\r\n"
+       "Accept:  application/sdp\r\n"
+       "User-Agent: fantasy media (v2020.09.03)\r\n\r\n",
+       "DESCRIBE",m_url.c_str(),++m_cseq
+       );
+       BOOST_ASSERT(strlen(write_buff)<sizeof(write_buff));
+       std::cout<<"request :"<<std::endl<<write_buff<<std::endl;
+       boost::asio::async_write( *m_sock,boost::asio::buffer(write_buff,strlen(write_buff)),boost::bind(&RTSPClient::handle_write,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));        
     } 
+    void RTSPClient::handle_read(const boost::system::error_code& error,std::size_t bytes_transferred){
+        if(!error.failed()){
+            std::cout<<"read :"<<std::endl<<read_buff<<std::endl;
+            m_sock->async_read_some(boost::asio::buffer(read_buff,sizeof(read_buff)-1),boost::bind(&RTSPClient::handle_read,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+        }
+        else{
+            std::cout<<"handle_read "<<error.message()<<"("<<error.value()<<")"<<std::endl;
+        }
+    }
     //rtsp://192.168.199.64
     void RTSPClient::handle_connect(const boost::system::error_code& error,const boost::asio::ip::tcp::endpoint& ep){
         if(!error.failed()){
             std::cout<<"handle_connect address=" <<ep.address().to_string()<<std::endl;
             std::cout<<"handle_connect aport=" <<ep.port()<<std::endl;
+            m_sock->async_read_some(boost::asio::buffer(read_buff,sizeof(read_buff)-1),boost::bind(&RTSPClient::handle_read,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+            //boost::asio::async_read_some(*m_sock,boost::asio::buffer(read_buff,1),boost::bind(&RTSPClient::handle_read,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
             sendDescribeCommand();
+            
         }
         else{
-            std::cout<<"handle_resolve "<<error.message()<<"("<<error.value()<<")"<<std::endl;
+            std::cout<<"handle_connect "<<error.message()<<"("<<error.value()<<")"<<std::endl;
         }
-        
     }
     void RTSPClient::handle_resolve(const boost::system::error_code& error,const boost::asio::ip::tcp::resolver::results_type& results){
         auto it = results.begin();
@@ -38,10 +76,8 @@ namespace fantasy{
             std::cout<<"handle_resolve "<<error.message()<<"("<<error.value()<<")"<<std::endl;
         }
     }
-    int RTSPClient::open(const char* url){
-        
-        if(strncmp(url,"rtsp://",7) != 0)
-            return -1;
+    int RTSPClient::play(){
+        const char* url = m_url.data();
         url+=7;
         const char* cstr_host = strstr(url,"@");
         if(cstr_host){
@@ -57,16 +93,9 @@ namespace fantasy{
         }
         if(m_resolver == nullptr)
             m_resolver = new boost::asio::ip::tcp::resolver(m_io_context);
-         //boost::asio::ip::tcp::resolver::results_type endpoints = 
+         
          std::cout<<"ready call async_resolve"<<std::endl;
-         boost::system::error_code ec;
-         /*
-         boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(cstr_host,"rtsp",ec);
-         std::cout<<"resolve "<<strerror(ec.value())<<"("<<ec.value()<<")"<<std::endl;
-         boost::asio::ip::tcp::socket socket(m_io_context);
-         boost::asio::connect(socket, endpoints,ec);
-         std::cout<<"connect "<<strerror(ec.value())<<"("<<ec.value()<<")"<<std::endl;
-         */
+         
          m_resolver->async_resolve(cstr_host,"rtsp",boost::bind(&RTSPClient::handle_resolve,this,boost::asio::placeholders::error,boost::asio::placeholders::results));
 
     }
