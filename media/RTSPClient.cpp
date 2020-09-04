@@ -5,12 +5,24 @@
 #include <iostream>
 namespace fantasy{
     RTSPClient::RTSPClient( boost::asio::io_context& ioContext,const char*progName,const char* rtspUrl):mIoContext(ioContext),
-        mProgName(progame),mUrl(rtspUrl),mCseq(0){
+        mProgName(progName),mUrl(rtspUrl),mCseq(0){
     }
-    void RTSPClient::handle_write(const boost::system::error_code& error,std::size_t bytes_transferred){
+    void RTSPClient::handleWrite(RequestRecord* request,const boost::system::error_code& error,std::size_t bytes_transferred){
         if(!error.failed())
         {
             std::cout<<"handle write success"<<std::endl;
+            request->writtenLen(bytes_transferred+request->writtenLen());
+            if(request->writtenLen() < strlen(request->bytesBuffer()))
+            {
+
+                const char* str = request->bytesBuffer()+request->writtenLen();
+                boost::asio::async_write( *mSock,boost::asio::buffer(str,strlen(str)),boost::bind(&RTSPClient::handleWrite,this,request,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+            }
+            else{
+                mSock->async_read_some(boost::asio::buffer(readBuff,sizeof(readBuff)-1),boost::bind(&RTSPClient::handleRead,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+            }
+
+            
         }
         else
         {
@@ -18,7 +30,12 @@ namespace fantasy{
         }
         
     }   
-    int RTSPClient::sendDescribeCommand() {
+    int RTSPClient::sendRequest(RequestRecord* request){
+       std::cout<<"request :"<<std::endl<<request->bytesBuffer()<<std::endl;
+       boost::asio::async_write( *mSock,boost::asio::buffer(request->bytesBuffer(),strlen(request->bytesBuffer())),boost::bind(&RTSPClient::handleWrite,this,request,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));        
+
+    }
+    int RTSPClient::sendDescribeCommand(ResponseHandler handler) {
         /*
         DESCRIBE rtsp://192.168.20.136:5000/xxx666 RTSP/1.0
         CSeq: 2
@@ -26,41 +43,37 @@ namespace fantasy{
         Accept: application/sdp
         User-Agent: VLC media player (LIVE555 Streaming Media v2005.11.10) 
         */
-       sprintf(write_buff,
-       "%s %s RTSP/1.0\r\n"
-       "CSeq: %d\r\n"
-       "Accept:  application/sdp\r\n"
-       "User-Agent: fantasy media (v2020.09.03)\r\n\r\n",
-       "DESCRIBE",m_url.c_str(),++m_cseq
-       );
-       BOOST_ASSERT(strlen(write_buff)<sizeof(write_buff));
-       std::cout<<"request :"<<std::endl<<write_buff<<std::endl;
-       boost::asio::async_write( *m_sock,boost::asio::buffer(write_buff,strlen(write_buff)),boost::bind(&RTSPClient::handle_write,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));        
+       return sendRequest(new RequestRecord(mCseq++,"DESCRIBE",handler));
+       
     } 
-    void RTSPClient::handle_read(const boost::system::error_code& error,std::size_t bytes_transferred){
+    void RTSPClient::handleRead(const boost::system::error_code& error,std::size_t bytes_transferred){
         if(!error.failed()){
-            std::cout<<"read :"<<std::endl<<read_buff<<std::endl;
-            m_sock->async_read_some(boost::asio::buffer(read_buff,sizeof(read_buff)-1),boost::bind(&RTSPClient::handle_read,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+            std::cout<<"read :"<<std::endl<<readBuff<<std::endl;
+            mSock->async_read_some(boost::asio::buffer(readBuff,sizeof(readBuff)-1),boost::bind(&RTSPClient::handleRead,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
         }
         else{
-            std::cout<<"handle_read "<<error.message()<<"("<<error.value()<<")"<<std::endl;
+            std::cout<<"handleRead "<<error.message()<<"("<<error.value()<<")"<<std::endl;
         }
     }
+    static void continueAfterDESCRIBE(RTSPClient* rtspClient,
+				 int resultCode, RTSPClient::ResponseRecord* response){
+
+                 }
     //rtsp://192.168.199.64
-    void RTSPClient::handle_connect(const boost::system::error_code& error,const boost::asio::ip::tcp::endpoint& ep){
+    void RTSPClient::handleConnect(const boost::system::error_code& error,const boost::asio::ip::tcp::endpoint& ep){
         if(!error.failed()){
-            std::cout<<"handle_connect address=" <<ep.address().to_string()<<std::endl;
-            std::cout<<"handle_connect aport=" <<ep.port()<<std::endl;
-            m_sock->async_read_some(boost::asio::buffer(read_buff,sizeof(read_buff)-1),boost::bind(&RTSPClient::handle_read,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
-            //boost::asio::async_read_some(*m_sock,boost::asio::buffer(read_buff,1),boost::bind(&RTSPClient::handle_read,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
-            sendDescribeCommand();
+            std::cout<<"handleConnect address=" <<ep.address().to_string()<<std::endl;
+            std::cout<<"handleConnect aport=" <<ep.port()<<std::endl;
+            //mSock->async_read_some(boost::asio::buffer(readBuff,sizeof(readBuff)-1),boost::bind(&RTSPClient::handleRead,this,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+            
+            sendDescribeCommand(continueAfterDESCRIBE);
             
         }
         else{
-            std::cout<<"handle_connect "<<error.message()<<"("<<error.value()<<")"<<std::endl;
+            std::cout<<"handleConnect "<<error.message()<<"("<<error.value()<<")"<<std::endl;
         }
     }
-    void RTSPClient::handle_resolve(const boost::system::error_code& error,const boost::asio::ip::tcp::resolver::results_type& results){
+    void RTSPClient::handleResolve(const boost::system::error_code& error,const boost::asio::ip::tcp::resolver::results_type& results){
         auto it = results.begin();
         for(auto it = results.begin();it != results.end();it++){
             std::cout<<"address=" <<it->endpoint().address().to_string()<<std::endl;
@@ -68,16 +81,16 @@ namespace fantasy{
         } 
         if(!error.failed())
         {
-            if(m_sock == nullptr)
-                m_sock = new boost::asio::ip::tcp::socket(m_io_context);
-            boost::asio::async_connect(*m_sock,results, boost::bind(&RTSPClient::handle_connect,this, boost::asio::placeholders::error,boost::asio::placeholders::endpoint));
+            if(mSock == nullptr)
+                mSock = new boost::asio::ip::tcp::socket(mIoContext);
+            boost::asio::async_connect(*mSock,results, boost::bind(&RTSPClient::handleConnect,this, boost::asio::placeholders::error,boost::asio::placeholders::endpoint));
         }
         else{
-            std::cout<<"handle_resolve "<<error.message()<<"("<<error.value()<<")"<<std::endl;
+            std::cout<<"handleResolve "<<error.message()<<"("<<error.value()<<")"<<std::endl;
         }
     }
     int RTSPClient::play(){
-        const char* url = m_url.data();
+        const char* url = mUrl.data();
         url+=7;
         const char* cstr_host = strstr(url,"@");
         if(cstr_host){
@@ -91,12 +104,53 @@ namespace fantasy{
         {
             cstr_host = url;
         }
-        if(m_resolver == nullptr)
-            m_resolver = new boost::asio::ip::tcp::resolver(m_io_context);
+        if(mResolver == nullptr)
+            mResolver = new boost::asio::ip::tcp::resolver(mIoContext);
          
          std::cout<<"ready call async_resolve"<<std::endl;
          
-         m_resolver->async_resolve(cstr_host,"rtsp",boost::bind(&RTSPClient::handle_resolve,this,boost::asio::placeholders::error,boost::asio::placeholders::results));
+         mResolver->async_resolve(cstr_host,"rtsp",boost::bind(&RTSPClient::handleResolve,this,boost::asio::placeholders::error,boost::asio::placeholders::results));
 
+    }
+    ////////// RTSPClient::RequestRecord implementation //////////
+    RTSPClient::RequestRecord::RequestRecord(uint32_t cseq,const char* method,const char* url,ResponseHandler handler,const char* progName):mCseq(cseq),mMethod(method),mHandler(handler),mWrittenLen(0){
+      const char* authenticatorStr = "";
+      char const* const cmdFmt =
+      "%s %s RTSP/1.0\r\n"
+      "CSeq: %d\r\n"
+      "%s"  //authenticatorStr
+      "User-Agent: %s(fantasy media v2020.09.03)\r\n"
+      "%s\r\n"  //extraHeaders for example : Accept:  application/sdp
+      //"%s"
+      "\r\n"
+      //"%s"
+      ;
+
+    unsigned cmdSize = strlen(cmdFmt)
+      + strlen(method) + strlen(url) 
+      + 20 /* max int len */
+      + strlen(authenticatorStr)
+      + strlen(progName)
+      + strlen(extraHeaders())
+      //+ strlen(contentLengthHeader)
+      //+ contentStrLen
+      ;
+      mBytesBuffer.resize(cmdSize);
+    char *cmd = mBytesBuffer.data();
+    sprintf(cmd, cmdFmt
+	    ,method ,url
+	    ,cseq
+	    ,authenticatorStr
+	    ,progName
+        ,extraHeaders()
+	    //contentLengthHeader,
+	    //contentStr
+        );
+
+    }
+    const char* RTSPClient::RequestRecord::extraHeaders()const{
+        if(mMethod == "DESCRIBE")
+            return "Accept:  application/sdp";
+        else return "";
     }
 }
