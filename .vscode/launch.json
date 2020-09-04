@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": " ${workspaceFolder}/testProgs/testRTSPClient",
-            "args": [],
+            "args": ["rtsp://admin:hidoo123@192.168.199.64"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
