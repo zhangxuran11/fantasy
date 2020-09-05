@@ -45,13 +45,15 @@ namespace fantasy{
                 else if(response->statusCode() == 401){
                     mNonce = response->nonce();
                     mRealm = response->realm();
-                    asyncRequest(new RequestRecord(mCseq++,"DESCRIBE",mUrl.c_str(), request->mHandler,mProgName.c_str(),mUserName.c_str(),mPasswd.c_str(),mRealm.c_str(),mNonce.c_str()));
+                    //asyncRequest(new RequestRecord(mCseq++,"DESCRIBE",mUrl.c_str(), request->mHandler,mProgName.c_str(),mUserName.c_str(),mPasswd.c_str(),mRealm.c_str(),mNonce.c_str()));
+                    asyncRequest(new RequestRecord(mCseq++,"DESCRIBE",mUrl.c_str(), request->mHandler,mProgName.c_str(),mUserName.c_str(),mPasswd.c_str(),"",""));
                 }
                 else{
                     request->responseHandler(this,response->statusCode(),response);
                 }
-                delete request;
                 delete response;
+                delete request;
+                
                 return;
             }
             else{//继续接收
@@ -156,14 +158,23 @@ namespace fantasy{
      unsigned cmdSize = strlen(cmdFmt)
       + strlen(method) + strlen(url) 
       + 20 /* max int len */
-      + mAuthorization.length();
+      + mAuthorization.length()
       + strlen(progName)
       + strlen(extraHeaders())
       //+ strlen(contentLengthHeader)
       //+ contentStrLen
       ;
+      printf("\nstrlen(cmdFmt)=%lu\n",strlen(cmdFmt));
+      printf("strlen(method)=%lu\n",strlen(method));
+      printf("strlen(url)=%lu\n",strlen(url));
+      printf("mAuthorization.length()=%lu\n",mAuthorization.length());
+      printf("strlen(progName)=%lu\n",strlen(progName));
+      printf("strlen(extraHeaders())=%lu\n",strlen(extraHeaders()));
+      printf("cmdSize=%u\n",cmdSize);
+      
       mRequestBytesBuffer.resize(cmdSize);
     char *cmd = mRequestBytesBuffer.data();
+    const char* t = mAuthorization.c_str();
     sprintf(cmd, cmdFmt
 	    ,method ,url
 	    ,cseq
@@ -173,6 +184,8 @@ namespace fantasy{
 	    //contentLengthHeader,
 	    //contentStr
         );
+        printf("strlen(cmd)=%lu\n\n",strlen(cmd));
+        std::cout<<cmd<<std::endl;
 
     }
     const char* RTSPClient::RequestRecord::extraHeaders()const{
