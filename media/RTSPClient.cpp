@@ -3,6 +3,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <boost/bind/bind.hpp>
+#include <boost/uuid/detail/md5.hpp>
+#include <boost/algorithm/hex.hpp>
 #include <sstream>
 #include <iostream>
 namespace fantasy{
@@ -194,8 +196,24 @@ namespace fantasy{
         else return "";
     }
     //Authorization: Digest username=“admin”, realm=“000102030405”, nonce=“59caf6cbb9d5dd0ae2a168059919f559”, uri=“rtsp://10.175.30.35”, response=“039837838f10192c7dcb98b0485265e9”
+    static std::string md5sum(const void* buffer,std::size_t byte_count ){
+        std::string str_md5;
+        boost::uuids::detail::md5 boost_md5;
+        boost_md5.process_bytes(buffer, byte_count);
+		boost::uuids::detail::md5::digest_type digest;
+		boost_md5.get_digest(digest);
+		const auto char_digest = reinterpret_cast<const char*>(&digest);
+		str_md5.clear();
+		boost::algorithm::hex(char_digest,char_digest+sizeof(boost::uuids::detail::md5::digest_type), std::back_inserter(str_md5));
+        return str_md5;
+    }
     void RTSPClient::RequestRecord::mkAuthorization(const char* user,const char* passwd,const char* realm,const char* nonce){
-
+        
+        
+        char buffer[] = "abcd";
+        std::string str_md5 = md5sum(buffer,strlen(buffer));
+		
+		return;
 
 
     }
