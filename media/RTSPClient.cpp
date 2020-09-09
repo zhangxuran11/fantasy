@@ -1,10 +1,13 @@
 #include "RTSPClient.h"
-#include <string.h>
+#include <string>
 #include <cstring>
 #include <cstdlib>
 #include <boost/bind/bind.hpp>
 #include <boost/uuid/detail/md5.hpp>
 #include <boost/algorithm/hex.hpp>
+//#include <boost/algorithm/algorithm.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/endian.hpp>
 #include <sstream>
 #include <iostream>
 namespace fantasy{
@@ -37,7 +40,7 @@ namespace fantasy{
             const char* readBuff = request->responseBytesBuffer()+request->readLen();
             const char* endOfReadBuff = request->responseBytesBuffer() +request->readLen()+bytes_transferred;
             request->readLen(bytes_transferred+request->readLen());
-            while((readBuff < (endOfReadBuff - 3)) && (readBuff[0] != '\r' || readBuff[1] != '\n') || readBuff[2] != '\r' || readBuff[3] != '\n')
+            while((readBuff < (endOfReadBuff - 3)) && (readBuff[0] != '\r' || readBuff[1] != '\n' || readBuff[2] != '\r' || readBuff[3] != '\n') )
                 readBuff++;
             if(readBuff < (endOfReadBuff - 3)){//接收一个完整response
                 ResponseRecord* response = new ResponseRecord(request->responseBytesBuffer());
@@ -47,8 +50,7 @@ namespace fantasy{
                 else if(response->statusCode() == 401){
                     mNonce = response->nonce();
                     mRealm = response->realm();
-                    //asyncRequest(new RequestRecord(mCseq++,"DESCRIBE",mUrl.c_str(), request->mHandler,mProgName.c_str(),mUserName.c_str(),mPasswd.c_str(),mRealm.c_str(),mNonce.c_str()));
-                    asyncRequest(new RequestRecord(mCseq++,"DESCRIBE",mUrl.c_str(), request->mHandler,mProgName.c_str(),mUserName.c_str(),mPasswd.c_str(),"",""));
+                    asyncRequest(new RequestRecord(mCseq++,"DESCRIBE",mUrl.c_str(), request->mHandler,mProgName.c_str(),mUserName.c_str(),mPasswd.c_str(),mRealm.c_str(),mNonce.c_str()));
                 }
                 else{
                     request->responseHandler(this,response->statusCode(),response);
@@ -72,7 +74,8 @@ namespace fantasy{
     }
     int RTSPClient::asyncRequest(RequestRecord* request){
        std::cout<<"request :"<<std::endl<<request->requestBytesBuffer()<<std::endl;
-       boost::asio::async_write( *mSock,boost::asio::buffer(request->requestBytesBuffer(),strlen(request->requestBytesBuffer())),boost::bind(&RTSPClient::handleWrite,this,request,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));        
+       boost::asio::async_write( *mSock,boost::asio::buffer(request->requestBytesBuffer(),strlen(request->requestBytesBuffer())),boost::bind(&RTSPClient::handleWrite,this,request,boost::asio::placeholders::error,boost::asio::placeholders::bytes_transferred));
+       return 0;
     }
     
 
@@ -117,7 +120,8 @@ namespace fantasy{
     }
     int RTSPClient::play(){
         std::string url = mUrl;
-        if(url.find("rtsp://") == -1){
+        
+        if(url.find("rtsp://") == std::string::npos){
             std::cout<<"url is error:"<<url<<std::endl;
             return -1;
         }
@@ -139,7 +143,9 @@ namespace fantasy{
 
     }
     ////////// RTSPClient::RequestRecord implementation //////////
-    RTSPClient::RequestRecord::RequestRecord(uint32_t cseq,const char* method,const char* url,ResponseHandler handler,const char* progName,const char* user,const char* passwd,const char* realm,const char* nonce):mCseq(cseq),mMethod(method),mHandler(handler),mWrittenLen(0),mReadLen(0),mResponseBytesBuffer(1024){
+    RTSPClient::RequestRecord::RequestRecord(uint32_t cseq,const char* method,const char* url,ResponseHandler handler,const char* progName,const char* user,const char* passwd,const char* realm,const char* nonce)
+            :mCseq(cseq),mMethod(method),mHandler(handler),mWrittenLen(0),mReadLen(0),mResponseBytesBuffer(1024)
+             , mUrl(url){
       
       char const* const cmdFmt =
       "%s %s RTSP/1.0\r\n"
@@ -166,13 +172,6 @@ namespace fantasy{
       //+ strlen(contentLengthHeader)
       //+ contentStrLen
       ;
-      printf("\nstrlen(cmdFmt)=%lu\n",strlen(cmdFmt));
-      printf("strlen(method)=%lu\n",strlen(method));
-      printf("strlen(url)=%lu\n",strlen(url));
-      printf("mAuthorization.length()=%lu\n",mAuthorization.length());
-      printf("strlen(progName)=%lu\n",strlen(progName));
-      printf("strlen(extraHeaders())=%lu\n",strlen(extraHeaders()));
-      printf("cmdSize=%u\n",cmdSize);
       
       mRequestBytesBuffer.resize(cmdSize);
     char *cmd = mRequestBytesBuffer.data();
@@ -186,7 +185,6 @@ namespace fantasy{
 	    //contentLengthHeader,
 	    //contentStr
         );
-        printf("strlen(cmd)=%lu\n\n",strlen(cmd));
         std::cout<<cmd<<std::endl;
 
     }
@@ -195,6 +193,8 @@ namespace fantasy{
             return "Accept:  application/sdp\r\n";
         else return "";
     }
+    
+    
     //Authorization: Digest username=“admin”, realm=“000102030405”, nonce=“59caf6cbb9d5dd0ae2a168059919f559”, uri=“rtsp://10.175.30.35”, response=“039837838f10192c7dcb98b0485265e9”
     static std::string md5sum(const void* buffer,std::size_t byte_count ){
         std::string str_md5;
@@ -202,20 +202,30 @@ namespace fantasy{
         boost_md5.process_bytes(buffer, byte_count);
 		boost::uuids::detail::md5::digest_type digest;
 		boost_md5.get_digest(digest);
+        for(int i =0;i < sizeof(digest)/sizeof(digest[0]);i++)// 跟digest定义形式相关
+            digest[i] = boost::endian::native_to_big(digest[i]);
 		const auto char_digest = reinterpret_cast<const char*>(&digest);
 		str_md5.clear();
-		boost::algorithm::hex(char_digest,char_digest+sizeof(boost::uuids::detail::md5::digest_type), std::back_inserter(str_md5));
+		boost::algorithm::hex(char_digest,char_digest+sizeof(boost::uuids::detail::md5::digest_type), std::back_inserter(str_md5)); 
+        boost::to_lower(str_md5);
         return str_md5;
     }
+    static std::string md5sum(const std::string& str ){
+        return md5sum(str.c_str(),str.length());
+    }
+    //Authorization: Digest username="admin", realm="IP Camera(D5700)", nonce="86ee67548d80ae539dff9d263c3106ea", uri="rtsp://admin:hidoo123@192.168.10.64", response="208d17e47c5a6d7071f6c13c3fb221de"
     void RTSPClient::RequestRecord::mkAuthorization(const char* user,const char* passwd,const char* realm,const char* nonce){
-        
-        
-        char buffer[] = "abcd";
-        std::string str_md5 = md5sum(buffer,strlen(buffer));
-		
+        // char buffer[] = "abcd";
+        // std::string str_md5 = md5sum(buffer,strlen(buffer));
+        //8a31e256dadbd3b735a7dfe3b43d161d:01eb2275cc1c3ea1d18dd5fbfd0fb38f:47cd0275a0fdbb83dc16c3153888f13c
+        //80215fb728b7dd8e0b36b4e63f0f650f
+        //nonce = "01eb2275cc1c3ea1d18dd5fbfd0fb38f";
+        //response= md5( md5(username:realm:password):nonce:md5(public_method:url) );
+        //Authorization: Digest username="admin", realm="IP Camera(D5700)", nonce="8a03c4c7d317ededf9975c247fb44949", uri="rtsp://admin:hidoo123@192.168.10.64/", response="b261f302c1c15e1dbf9545ed909c070f"
+        std::string sha1 = md5sum(std::string(user)+":"+realm+":"+passwd);
+        std::string sha2 = md5sum(mMethod+":"+mUrl);
+        mAuthorization= std::string("Authorization: Digest username=\"")+user+"\",realm=\""+realm+"\", nonce=\""+nonce+"\", uri=\""+mUrl+"\", response=\""+md5sum( sha1+":"+nonce+":"+sha2)+"\"\r\n";
 		return;
-
-
     }
     ////////// RTSPClient::ResponseRecord implementation //////////
     RTSPClient::ResponseRecord::ResponseRecord(const char* responseBytesBuffer){

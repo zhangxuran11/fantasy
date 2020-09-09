@@ -28,6 +28,7 @@ namespace fantasy{
         class RequestRecord{
             uint32_t mCseq;
             std::string mMethod;
+            std::string mUrl;
             
             std::vector<char> mRequestBytesBuffer;
             std::vector<char> mResponseBytesBuffer;
@@ -57,8 +58,8 @@ namespace fantasy{
         RTSPClient(boost::asio::io_context& ioContext,const char*progName,const char* rtspUrl);
         int play();
         private:
-        std::string mProgName;
         boost::asio::io_context& mIoContext;
+        std::string mProgName;
         boost::asio::ip::tcp::resolver* mResolver;
         boost::asio::ip::tcp::socket* mSock;
         std::string mUrl;

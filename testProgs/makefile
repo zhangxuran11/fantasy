@@ -1,6 +1,6 @@
 TAGET=testRTSPClient
 BOOST_ROOT=../../boost_1_74_0/
-CXXFLAGS=-I../media/include/ -I${BOOST_ROOT}
+CXXFLAGS= -Wall -I../media/include/ -I${BOOST_ROOT}
 LDFLAGS=-lpthread
 
 CXX_SRCS = ../media/RTSPClient.cpp \
