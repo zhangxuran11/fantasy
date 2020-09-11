@@ -295,6 +295,9 @@ namespace fantasy{
                     }
                 }
             }
+            else if(k == "www-authenticate"){
+                
+            }
         }
     }
 }
