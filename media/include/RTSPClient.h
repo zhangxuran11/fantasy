@@ -6,7 +6,15 @@
 namespace fantasy{
     class RTSPClient{
         public:
-        
+        class SDPMedia{
+            public:
+            SDPMedia();
+
+        };
+        class SDPParser{
+            public:
+            SDPParser(const char* sdpStr);
+        };
         class ResponseRecord{
             int mStatusCode;
             uint32_t mCseq;
