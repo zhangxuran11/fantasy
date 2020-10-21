@@ -138,13 +138,12 @@ namespace fantasy{
             mResolver = new boost::asio::ip::tcp::resolver(mIoContext);
          std::cout<<"ready call async_resolve"<<std::endl;
          mResolver->async_resolve(url.c_str(),"rtsp",boost::bind(&RTSPClient::handleResolve,this,boost::asio::placeholders::error,boost::asio::placeholders::results));
-         return 0;
-
+        return 0;
     }
     ////////// RTSPClient::RequestRecord implementation //////////
     RTSPClient::RequestRecord::RequestRecord(uint32_t cseq,const char* method,const char* url,ResponseHandler handler,const char* progName,const char* user,const char* passwd,const char* realm,const char* nonce)
-            :mCseq(cseq),mMethod(method), mUrl(url),mWrittenLen(0),mReadLen(0),mResponseBytesBuffer(1024)
-             ,mHandler(handler){
+            :mCseq(cseq),mMethod(method), mUrl(url),mResponseBytesBuffer(1024),mWrittenLen(0),mReadLen(0),mHandler(handler)
+             {
       
       char const* const cmdFmt =
       "%s %s RTSP/1.0\r\n"
@@ -227,13 +226,14 @@ namespace fantasy{
     }
     ////////// RTSPClient::ResponseRecord implementation //////////
     RTSPClient::ResponseRecord::ResponseRecord(const char* responseBytesBuffer){
-        std::string line,tmp;
+        std::string line,tmp,contentType;
         std::stringstream responseStream(responseBytesBuffer);
-        getline(responseStream,line);
+        std::getline(responseStream,line);
         std::stringstream lineStream(line);
         lineStream >> tmp >> mStatusCode >> tmp;
-        while(getline(responseStream,line)){
-            if(line == "\r") continue;
+        while(std::getline(responseStream,line)){
+            if(line == "\r")
+                continue;
             line.erase(line.find_last_not_of("\r") + 1); //去除尾换行
             //line.erase(0, line.find_first_not_of(" "));
 
@@ -293,6 +293,35 @@ namespace fantasy{
                     }
                 }
             }
+            else if(k == "content-type" ){
+                contentType = v;
+                /*
+                Content-Type: application/sdp
+                Content-Base: rtsp://admin:hidoo123@192.168.10.64/
+                Content-Length: 748
+                */
+            }
+            else if(k == "content-length" ){
+                int contentLength = std::stoul(v);
+                
+                std::getline(responseStream,line);
+                char* content = new char[contentLength+10];
+                responseStream.readsome(content,contentLength);
+            }
+
+        }
+    }
+    RTSPClient::SDPParser::SDPParser(const char* sdpStr){
+        std::string line,tmp;
+        std::stringstream sdpStrStream(sdpStr);
+        //std::getline(responseStream,line);
+        //lineStream >> tmp >> mStatusCode >> tmp;
+        while(std::getline(sdpStrStream,line)){
+            std::string k = line.substr(0,line.find('='));
+            std::string v = line.substr(line.find('=')+1);
+            if(k == "m")
+                continue;
+            line.erase(line.find_last_not_of("\r") + 1); //去除尾换行
         }
     }
 }
