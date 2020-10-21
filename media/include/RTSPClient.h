@@ -29,11 +29,11 @@ namespace fantasy{
             uint32_t mCseq;
             std::string mMethod;
             std::string mUrl;
-            
-            std::vector<char> mRequestBytesBuffer;
-            std::vector<char> mResponseBytesBuffer;
+
             uint32_t mWrittenLen;
             uint32_t mReadLen;
+            std::vector<char> mRequestBytesBuffer;
+            std::vector<char> mResponseBytesBuffer;
             std::string mAuthorization;
 
             void mkAuthorization(const char* user,const char* passwd,const char* realm,const char* nonce);
